@@ -1,0 +1,177 @@
+/* 
+ * Magic Mirror
+ * Module: MMM-EnphaseSolar
+ * By Matt Thurling
+ *
+ * MIT Licensed.
+ */
+
+Module.register("MMM-EnphaseSolar",{
+
+    defaults: {
+        gatewayHost: "",
+        token: "",
+        refreshInterval: 1000 * 60 * 1, // 1 minute
+        displayCurrentProduction: true,
+        displayCurrentUsage: true,
+        displayNetOutput: true,
+        displayTodaysProduction: true,
+        displayTodaysUsage: true,
+        displayLastUpdate: true,
+        displayLastUpdateFormat: "ddd HH:mm:ss",
+    },
+
+    start: function() {
+        Log.info("Starting module: " + this.name);
+
+        this.currentProduction = {
+            title: "Current Production:",
+            suffix: "kW",
+            value: "Loading"
+        };
+        this.currentUsage = {
+            title: "Current Usage:",
+            suffix: "kW",
+            value: "Loading"
+        };
+        this.netOutput = {
+            importingTitle: "Importing:",
+            exportingTitle: "Exporting:",
+            suffix: "kW",
+            value: "Loading"
+        };
+        this.todaysProduction = {
+            title: "Produced Today:",
+            suffix: "kWh",
+            value: "Loading"
+        };
+        this.todaysUsage = {
+            title: "Used Today:",
+            suffix: "kWh",
+            value: "Loading"
+        }
+        this.lastUpdated = Date.now() / 1000;
+
+        this.loaded = false;
+        this.getEnphaseSolarData();
+
+        var self = this;
+
+        setInterval(function() {
+            self.getEnphaseSolarData();
+            self.updateDom();
+        }, this.config.refreshInterval);
+    },
+
+    //Import additional CSS Styles
+    getStyles: function() {
+        return ['MMM-EnphaseSolar.css']
+    },
+
+    getEnphaseSolarData: function() {
+        Log.info("MMM-EnphaseSolar: getting data");
+
+        this.sendSocketNotification("GET_ENPHASE_SOLAR", {
+            config: this.config,
+            sessionId: this.sessionId
+        });
+    },
+
+    socketNotificationReceived: function(notification, payload) {
+        if (notification === "ENPHASE_SOLAR_DATA") {
+            this.sessionId = payload.sessionId;
+            for (const productionData of payload.production) {
+                if (productionData.type === "eim") {
+                    // current production can be slightly negative when nothing is being produced so zero it in that case
+                    this.currentProduction.value = productionData.wNow < 0 ? 0 : (productionData.wNow / 1000).toFixed(2);
+                    this.todaysProduction.value = (productionData.whToday / 1000).toFixed(2);
+                    this.lastUpdated = productionData.readingTime;
+                }
+            }
+            for (const consumptionData of payload.consumption) {
+                if (consumptionData.measurementType === "total-consumption") {
+                    this.currentUsage.value = (consumptionData.wNow / 1000).toFixed(2);
+                    this.todaysUsage.value = (consumptionData.whToday / 1000).toFixed(2);
+                } else if (consumptionData.measurementType === "net-consumption") {
+                    this.netOutput.value = (consumptionData.wNow / 1000).toFixed(2);
+                }
+            }
+
+            this.loaded = true;
+            this.updateDom();
+        }
+    },
+
+    getDom: function() {
+        var wrapper = document.createElement("div");
+
+        if (!this.config.gatewayHost || !this.config.token) {
+            wrapper.innerHTML = "Missing configuration";
+            return wrapper;
+        }
+
+        //Display loading while waiting for API response
+        if (!this.loaded) {
+            wrapper.innerHTML = "Loading...";
+            return wrapper;
+        }
+
+        var tableElement = document.createElement("table");
+
+        if (this.config.displayCurrentProduction) {
+            tableElement.appendChild(this.addRow(this.currentProduction.title, this.currentProduction.value, this.currentProduction.suffix, 'current-production'));
+        }
+
+        if (this.config.displayCurrentUsage) {
+            tableElement.appendChild(this.addRow(this.currentUsage.title, this.currentUsage.value, this.currentUsage.suffix, 'current-usage'));
+        }
+
+        if (this.config.displayNetOutput) {
+            var netOutputTitle;
+            var netOutputClass;
+            if (this.netOutput.value > 0) {
+                netOutputTitle = this.netOutput.importingTitle;
+                netOutputClass = 'net-output-importing';
+            } else {
+                netOutputTitle = this.netOutput.exportingTitle;
+                netOutputClass = 'net-output-exporting';
+            }
+            tableElement.appendChild(this.addRow(netOutputTitle, Math.abs(this.netOutput.value), this.netOutput.suffix, netOutputClass));
+        }
+
+        if (this.config.displayTodaysProduction) {
+            tableElement.appendChild(this.addRow(this.todaysProduction.title, this.todaysProduction.value, this.todaysProduction.suffix, 'todays-production'));
+        }
+
+        if (this.config.displayTodaysUsage) {
+            tableElement.appendChild(this.addRow(this.todaysUsage.title, this.todaysUsage.value, this.todaysUsage.suffix, 'todays-usage'));
+        }
+
+        wrapper.appendChild(tableElement);
+
+        if (this.config.displayLastUpdate) {
+            var updateinfo = document.createElement("div");
+            updateinfo.className = "xsmall light";
+            updateinfo.innerHTML = "Last Updated: " + moment.unix(this.lastUpdated).format(this.config.displayLastUpdateFormat);
+            wrapper.appendChild(updateinfo);
+        }
+
+        return wrapper;
+    },
+
+    addRow: function(title, value, suffix, className) {
+        var rowElement = document.createElement("tr");
+
+        var titleElement = document.createElement("td");
+        titleElement.innerHTML = title;
+        titleElement.className = "title-" + className + " medium regular bright";
+        rowElement.appendChild(titleElement);
+
+        var dataElement = document.createElement("td");
+        dataElement.innerHTML = value + " " + suffix;
+        dataElement.className = "data-" + className + " medium light normal";
+        rowElement.appendChild(dataElement);
+
+        return rowElement;
+    }
+});
