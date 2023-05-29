@@ -21,7 +21,7 @@ module.exports = NodeHelper.create({
         if(notification === "GET_ENPHASE_SOLAR") {
             new Promise(resolve => {
                 if (payload.sessionId) {
-                    resolve(payload.sessionId);
+                    return resolve(payload.sessionId);
                 }
                 console.log("MMM-EnphaseSolar: Getting a session token")
                 const tokenOptions = {
