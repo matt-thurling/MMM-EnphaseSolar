@@ -31,13 +31,22 @@ modules: [
 ````
 
 ## Login Token
-Use of this module requires a login token. Apparently these tokens will expire after 12 months (though some have reported much less) so the following will need to be repeated when that happens. To obtain the token: 
+Use of this module requires a login token. Apparently these tokens will expire after 12 months (though some have reported much less) so the following will need to be repeated when that happens. There are two ways I know of to get the required token detailed below.
+
+*Note: some other modules (e.g. https://github.com/tkrywit/MMM-Solar/) and software that interact with Enphase will suggest logging into the developer portal to obtain an API key - however these keys are intended to be used with their cloud services, and so there’s pricing attached. At some point in the past using this API was free which is why others may suggest it, but this is no longer the case. Since this module is only reading from the local system’s APIs then you don’t need a cloud services API key.*
+
+### Method 1:
   1. Visit https://entrez.enphaseenergy.com/
   2. Login with your enphase owner login details
   3. In the 'Select System' text box, type in the name of your "site". You can find this value if you login to the Enlighten mobile app, press the menu button, and it will be displayed at the top under your user's name. You only need to enter the first 3 characters and it should do a search and then you need to select your site from the results (typically only one site). Note: in my case there is a '/' as the 3rd character in my site name so typing 4 characters always failed for me due to the way this character is handled by their search so keep that in mind if you have a similar issue.
   4. In the gateway box select your gateway (most people would only have one option here)
   5. Click Create access token
   6. Copy the entire text from the Access token text box or click the "Copy and close" button, then paste this into your config.js as the value for `token`.
+### Method 2:
+  1. Go to https://enlighten.enphaseenergy.com/login and login as the system owner
+  2. Get your serial number by navigating to the top right menu -> System -> Devices the look under Gateway. The value you want is the long number labelled "SN".
+  3. Copy/paste the following URL replacing YourSerialNumber with the value obtained from Step 2: https://enlighten.enphaseenergy.com/entrez-auth-token?serial_num=YourSerialNumber
+  4. Copy the value of the `token` field from the JSON displayed in your browser, and paste this into your config.js as the value for `token`.
 
 ## Optional Configurations
 | **Configuration** | **Description** | **Default** |
@@ -55,6 +64,11 @@ Use of this module requires a login token. Apparently these tokens will expire a
 ## Screenshot
 ![alt text](https://github.com/matt-thurling/MMM-EnphaseSolar/blob/main/Screenshot-Exporting.png "Exporting Example")
 ![alt text](https://github.com/matt-thurling/MMM-EnphaseSolar/blob/main/Screenshot-Importing.png "Importing Example")
+
+## Known Issues
+The values given by the API appear to be dependant on your system's configuration and installation setup. One user has reported that it seems their system does not have consumption monitoring because their current usage always equals their current production so netoutput is always zero. This has lead to their "Used Today" field always showing 0. My only recommendation would be to disable the display of this field if you've got a similar setup since it will just be taking up screen real estate in a useless manner.
+
+Please feel free to raise any other issues you might find.
 
 ## Attribution
 
