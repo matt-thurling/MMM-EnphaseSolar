@@ -21,9 +21,12 @@ module.exports = NodeHelper.create({
         if(notification === "GET_ENPHASE_SOLAR") {
             new Promise(resolve => {
                 if (payload.sessionId) {
+                    if (payload.config.debug) {
+                        console.debug("MMM-EnphaseSolar: already have a session token");
+                    }
                     return resolve(payload.sessionId);
                 }
-                console.log("MMM-EnphaseSolar: Getting a session token")
+                console.info("MMM-EnphaseSolar: Getting a session token");
                 const tokenOptions = {
                     host: payload.config.gatewayHost,
                     method: 'GET',
@@ -42,10 +45,10 @@ module.exports = NodeHelper.create({
                         if (sessionId) {
                             payload.sessionId = sessionId;
                         } else {
-                            console.log("Failed to get session id! Set-Cookie was: " + setCookie);
+                            console.error("MMM-EnphaseSolar: Failed to get session id! Set-Cookie was: " + setCookie);
                         }
                     } else {
-                        console.log("Failed to authorize with local gateway! Response code: " + response.statusCode);
+                        console.error("MMM-EnphaseSolar: Failed to authorize with local gateway! Response code: " + response.statusCode);
                     }
                     response.on('data', function() {
                     });
@@ -54,7 +57,7 @@ module.exports = NodeHelper.create({
                     });
                 });
                 tokenReq.on('error', (error) => {
-                    console.log("Failed to authorize with local gateway! error: " + error);
+                    console.error("MMM-EnphaseSolar: Failed to authorize with local gateway! error: " + error);
                 });
                 tokenReq.end();
             }).then(sessionId => {
@@ -70,18 +73,23 @@ module.exports = NodeHelper.create({
                 };
                 const dataReq = https.request(options, (response) => {
                     if (response.statusCode != 200) {
-                        console.log("data request error: " + response.statusCode);
+                        console.error("MMM-EnphaseSolar: data request error: " + response.statusCode);
                         // clear session id since its expiry may have been the cause of the failure, will retrieve a new one on next refresh
                         self.sendSocketNotification("ENPHASE_SOLAR_DATA", {sessionId: "", production: [], consumption: []});
                     }
                     response.on('data', (data) => {
-                        var jsonData = JSON.parse(data);
-                        jsonData.sessionId = sessionId;
-                        self.sendSocketNotification("ENPHASE_SOLAR_DATA", jsonData);
+                        let jsonData;
+                        try {
+                            jsonData = JSON.parse(data);
+                            jsonData.sessionId = sessionId;
+                            self.sendSocketNotification("ENPHASE_SOLAR_DATA", jsonData);
+                        } catch(e) {
+                            console.error("MMM-EnphaseSolar: Unable to parse JSON, data in response was: " + data);
+                        }
                     });
                 });
                 dataReq.on('error', (error) => {
-                    console.log("Failed to retrieve solar data! error: " + error);
+                    console.error("MMM-EnphaseSolar: Failed to retrieve solar data! error: " + error);
                 });
                 dataReq.end();
             });

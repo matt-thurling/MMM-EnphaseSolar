@@ -19,6 +19,7 @@ Module.register("MMM-EnphaseSolar",{
         displayTodaysUsage: true,
         displayLastUpdate: true,
         displayLastUpdateFormat: "ddd HH:mm:ss",
+        debug: false,
     },
 
     start: function() {
