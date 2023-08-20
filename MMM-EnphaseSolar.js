@@ -25,30 +25,30 @@ Module.register("MMM-EnphaseSolar",{
         Log.info("Starting module: " + this.name);
 
         this.currentProduction = {
-            title: "Current Production:",
-            suffix: "kW",
-            value: "Loading"
+            title: this.translate('CURRENT_PRODUCTION') + ":",
+            suffix: this.translate('SUFFIX_KILOWATT'),
+            value: this.translate('LOADING')
         };
         this.currentUsage = {
-            title: "Current Usage:",
-            suffix: "kW",
-            value: "Loading"
+            title: this.translate('CURRENT_USAGE') + ":",
+            suffix: this.translate('SUFFIX_KILOWATT'),
+            value: this.translate('LOADING')
         };
         this.netOutput = {
-            importingTitle: "Importing:",
-            exportingTitle: "Exporting:",
-            suffix: "kW",
-            value: "Loading"
+            importingTitle: this.translate('IMPORTING') + ":",
+            exportingTitle: this.translate('EXPORTING') + ":",
+            suffix: this.translate('SUFFIX_KILOWATT'),
+            value: this.translate('LOADING')
         };
         this.todaysProduction = {
-            title: "Produced Today:",
-            suffix: "kWh",
-            value: "Loading"
+            title: this.translate('PRODUCED_TODAY') + ":",
+            suffix: this.translate('SUFFIX_KILOWATTHOUR'),
+            value: this.translate('LOADING')
         };
         this.todaysUsage = {
-            title: "Used Today:",
-            suffix: "kWh",
-            value: "Loading"
+            title: this.translate('USED_TODAY') + ":",
+            suffix: this.translate('SUFFIX_KILOWATTHOUR'),
+            value: this.translate('LOADING')
         }
         this.lastUpdated = Date.now() / 1000;
 
@@ -106,13 +106,13 @@ Module.register("MMM-EnphaseSolar",{
         var wrapper = document.createElement("div");
 
         if (!this.config.gatewayHost || !this.config.token) {
-            wrapper.innerHTML = "Missing configuration";
+            wrapper.innerHTML = this.translate('ERROR_MISSING_CONFIG');
             return wrapper;
         }
 
         //Display loading while waiting for API response
         if (!this.loaded) {
-            wrapper.innerHTML = "Loading...";
+            wrapper.innerHTML = this.translate('LOADING');
             return wrapper;
         }
 
@@ -152,7 +152,7 @@ Module.register("MMM-EnphaseSolar",{
         if (this.config.displayLastUpdate) {
             var updateinfo = document.createElement("div");
             updateinfo.className = "xsmall light";
-            updateinfo.innerHTML = "Last Updated: " + moment.unix(this.lastUpdated).format(this.config.displayLastUpdateFormat);
+            updateinfo.innerHTML = this.translate('LAST_UPDATED') + ": " + moment.unix(this.lastUpdated).format(this.config.displayLastUpdateFormat);
             wrapper.appendChild(updateinfo);
         }
 
@@ -173,5 +173,11 @@ Module.register("MMM-EnphaseSolar",{
         rowElement.appendChild(dataElement);
 
         return rowElement;
-    }
+    },
+
+    getTranslations() {
+        return {
+            en: 'translations/en.json',
+        };
+    },
 });

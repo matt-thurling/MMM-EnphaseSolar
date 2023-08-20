@@ -1,0 +1,13 @@
+{
+  "LOADING": "Loading...",
+  "CURRENT_PRODUCTION": "Current Production",
+  "CURRENT_USAGE": "Current Usage",
+  "IMPORTING": "Importing",
+  "EXPORTING": "Exporting",
+  "PRODUCED_TODAY": "Produced Today",
+  "USED_TODAY": "Used Today",
+  "LAST_UPDATED": "Last Updated",
+  "SUFFIX_KILOWATT": "kW",
+  "SUFFIX_KILOWATTHOUR": "kWh",
+  "ERROR_MISSING_CONFIG": "Missing configuration"
+}
