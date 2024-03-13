@@ -6,8 +6,10 @@
   "EXPORTING": "Exporting",
   "PRODUCED_TODAY": "Produced Today",
   "USED_TODAY": "Used Today",
+  "BATTERY": "Battery",
   "LAST_UPDATED": "Last Updated",
   "SUFFIX_KILOWATT": "kW",
   "SUFFIX_KILOWATTHOUR": "kWh",
+  "SUFFIX_PERCENT": "%",
   "ERROR_MISSING_CONFIG": "Missing configuration"
 }

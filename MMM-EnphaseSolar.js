@@ -19,6 +19,7 @@ Module.register("MMM-EnphaseSolar",{
         displayTodaysUsage: true,
         displayLastUpdate: true,
         displayLastUpdateFormat: "ddd HH:mm:ss",
+        displayBatteries: true,
         debug: false,
     },
 
@@ -49,6 +50,11 @@ Module.register("MMM-EnphaseSolar",{
         this.todaysUsage = {
             title: this.translate('USED_TODAY') + ":",
             suffix: this.translate('SUFFIX_KILOWATTHOUR'),
+            value: this.translate('LOADING')
+        }
+        this.currentBatteryStatus = {
+            title: this.translate('BATTERY'),
+            suffix: this.translate('SUFFIX_PERCENT'),
             value: this.translate('LOADING')
         }
         this.lastUpdated = Date.now() / 1000;
@@ -95,6 +101,14 @@ Module.register("MMM-EnphaseSolar",{
                     this.todaysUsage.value = (consumptionData.whToday / 1000).toFixed(2);
                 } else if (consumptionData.measurementType === "net-consumption") {
                     this.netOutput.value = (consumptionData.wNow / 1000).toFixed(2);
+                }
+            }
+            for (const inventoryData of payload.inventory) {
+                if (inventoryData.type === "ENCHARGE") {
+                    this.currentBatteryStatus.value = [];
+                    for (const device of inventoryData.devices) {
+                        this.currentBatteryStatus.value.push(device);
+                    }
                 }
             }
 
@@ -146,6 +160,14 @@ Module.register("MMM-EnphaseSolar",{
 
         if (this.config.displayTodaysUsage) {
             tableElement.appendChild(this.addRow(this.todaysUsage.title, this.todaysUsage.value, this.todaysUsage.suffix, 'todays-usage'));
+        }
+
+        if (this.config.displayBatteries && this.currentBatteryStatus.value) {
+            var batteryCount = 1;
+            for (const battery of this.currentBatteryStatus.value) {
+                tableElement.appendChild(this.addRow(this.currentBatteryStatus.title + batteryCount + ':', this.currentBatteryStatus.value[batteryCount-1].percentFull, this.currentBatteryStatus.suffix));
+                batteryCount++;
+            }
         }
 
         wrapper.appendChild(tableElement);
