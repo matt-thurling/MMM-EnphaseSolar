@@ -52,9 +52,21 @@ Module.register("MMM-EnphaseSolar",{
             suffix: this.translate('SUFFIX_KILOWATTHOUR'),
             value: this.translate('LOADING')
         }
+        this.currentBatteryState = {
+            title: this.translate('BATTERY_STATE') + ":",
+            suffix: '',
+            value: this.translate('LOADING')
+        }
         this.currentBatteryStatus = {
-            title: this.translate('BATTERY'),
+            title: this.translate('BATTERY_CHARGE'),
             suffix: this.translate('SUFFIX_PERCENT'),
+            value: this.translate('LOADING')
+        }
+        this.currentBatteryUsage = {
+            idleTitle: this.translate('BATTERY_USAGE_IDLE') + ":",
+            chargingTitle: this.translate('BATTERY_USAGE_CHARGING') + ":",
+            dischargingTitle: this.translate('BATTERY_USAGE_DISCHARGING') + ":",
+            suffix: this.translate('SUFFIX_KILOWATT'),
             value: this.translate('LOADING')
         }
         this.lastUpdated = Date.now() / 1000;
@@ -87,30 +99,15 @@ Module.register("MMM-EnphaseSolar",{
     socketNotificationReceived: function(notification, payload) {
         if (notification === "ENPHASE_SOLAR_DATA") {
             this.sessionId = payload.sessionId;
-            for (const productionData of payload.production) {
-                if (productionData.type === "eim") {
-                    // current production can be slightly negative when nothing is being produced so zero it in that case
-                    this.currentProduction.value = productionData.wNow < 0 ? 0 : (productionData.wNow / 1000).toFixed(2);
-                    this.todaysProduction.value = (productionData.whToday / 1000).toFixed(2);
-                    this.lastUpdated = productionData.readingTime;
-                }
-            }
-            for (const consumptionData of payload.consumption) {
-                if (consumptionData.measurementType === "total-consumption") {
-                    this.currentUsage.value = (consumptionData.wNow / 1000).toFixed(2);
-                    this.todaysUsage.value = (consumptionData.whToday / 1000).toFixed(2);
-                } else if (consumptionData.measurementType === "net-consumption") {
-                    this.netOutput.value = (consumptionData.wNow / 1000).toFixed(2);
-                }
-            }
-            for (const inventoryData of payload.inventory) {
-                if (inventoryData.type === "ENCHARGE") {
-                    this.currentBatteryStatus.value = [];
-                    for (const device of inventoryData.devices) {
-                        this.currentBatteryStatus.value.push(device);
-                    }
-                }
-            }
+            this.currentProduction.value = payload.currentProduction;
+            this.todaysProduction.value = payload.todaysProduction;
+            this.lastUpdated = payload.lastUpdated;
+            this.currentUsage.value = payload.currentUsage;
+            this.todaysUsage.value = payload.todaysUsage;
+            this.netOutput.value = payload.netOutput;
+            this.currentBatteryState.value = payload.currentBatteryState;
+            this.currentBatteryStatus.value = payload.currentBatteryStatus;
+            this.currentBatteryUsage.value = payload.currentBatteryUsage;
 
             this.loaded = true;
             this.updateDom();
@@ -162,12 +159,25 @@ Module.register("MMM-EnphaseSolar",{
             tableElement.appendChild(this.addRow(this.todaysUsage.title, this.todaysUsage.value, this.todaysUsage.suffix, 'todays-usage'));
         }
 
-        if (this.config.displayBatteries && this.currentBatteryStatus.value) {
+        if (this.config.displayBatteries) {
+            var batteryStateClass = 'battery-state-' + this.currentBatteryState.value;
+            tableElement.appendChild(this.addRow(this.currentBatteryState.title, this.currentBatteryState.value, this.currentBatteryState.suffix, batteryStateClass));
+
             var batteryCount = 1;
             for (const battery of this.currentBatteryStatus.value) {
-                tableElement.appendChild(this.addRow(this.currentBatteryStatus.title + batteryCount + ':', this.currentBatteryStatus.value[batteryCount-1].percentFull, this.currentBatteryStatus.suffix));
+                tableElement.appendChild(this.addRow(this.currentBatteryStatus.title + ' ' + batteryCount + ':', this.currentBatteryStatus.value[batteryCount-1].percentFull, this.currentBatteryStatus.suffix));
                 batteryCount++;
             }
+
+            var usageTitle;
+            if (this.currentBatteryUsage.value == 0) {
+                usageTitle = this.currentBatteryUsage.idleTitle;
+            } else if (this.currentBatteryUsage > 0) {
+                usageTitle = this.currentBatteryUsage.dischargingTitle;
+            } else if (this.currentBatteryUsage < 0) {
+                usageTitle = this.currentBatteryUsage.chargingTitle;
+            }
+            tableElement.appendChild(this.addRow(usageTitle, this.currentBatteryUsage.value, this.currentBatteryUsage.suffix, batteryStateClass));
         }
 
         wrapper.appendChild(tableElement);

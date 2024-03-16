@@ -69,12 +69,47 @@ module.exports = NodeHelper.create({
                     var processedData = {};
                     for (const data of returnedData) {
                         if (data.production) {
-                            processedData.production = data.production.production;
-                            processedData.consumption = data.production.consumption;
+                            if (data.production.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                sessionId = null;
+                            }
+                            for (const productionData of data.production.production) {
+                                if (productionData.type === "eim") {
+                                    // current production can be slightly negative when nothing is being produced so zero it in that case
+                                    processedData.currentProduction = productionData.wNow < 0 ? 0 : (productionData.wNow / 1000).toFixed(2);
+                                    processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
+                                    processedData.lastUpdated = productionData.readingTime;
+                                }
+                            }
+                            for (const consumptionData of data.production.consumption) {
+                                if (consumptionData.measurementType === "total-consumption") {
+                                    processedData.currentUsage = (consumptionData.wNow / 1000).toFixed(2);
+                                    processedData.todaysUsage = (consumptionData.whToday / 1000).toFixed(2);
+                                } else if (consumptionData.measurementType === "net-consumption") {
+                                    processedData.netOutput = (consumptionData.wNow / 1000).toFixed(2);
+                                }
+                            }
+                            for (const storageData of data.production.storage) {
+                                if (storageData.type === "acb") {
+                                    processedData.currentBatteryState = storageData.state;
+                                    processedData.currentBatteryUsage = (storageData.wNow / 1000).toFixed(2);
+                                }
+                            }
                             processedData.storage = data.production.storage;
                         }
                         else if (data.inventory) {
-                            processedData.inventory = data.inventory;
+                            if (data.inventory.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                sessionId = null;
+                            }
+                            for (const inventoryData of data.inventory) {
+                                if (inventoryData.type === "ENCHARGE") {
+                                    processedData.currentBatteryStatus = [];
+                                    for (const device of inventoryData.devices) {
+                                        processedData.currentBatteryStatus.push(device);
+                                    }
+                                }
+                            }
                         }
                     }
                     processedData.sessionId = sessionId;
@@ -98,23 +133,29 @@ module.exports = NodeHelper.create({
                 }
             };
             const dataReq = https.request(options, (response) => {
+                var returnObject = {};
                 if (response.statusCode != 200) {
                     console.error("MMM-EnphaseSolar: data request error: " + response.statusCode);
                     // clear session id since its expiry may have been the cause of the failure, will retrieve a new one on next refresh
-                    self.sendSocketNotification("ENPHASE_SOLAR_DATA", {sessionId: "", production: [], consumption: []});
+                    returnObject[resultName] = {error: true};
+                    resolve(returnObject);
                 }
                 response.on('data', (data) => {
-                    var returnObject = {};
                     try {
                         returnObject[resultName] = JSON.parse(data);
                         resolve(returnObject);
                     } catch(e) {
                         console.error("MMM-EnphaseSolar: Unable to parse JSON, data in response was: " + data);
+                        returnObject[resultName] = {error: true};
+                        resolve(returnObject);
                     }
                 });
             });
             dataReq.on('error', (error) => {
                 console.error("MMM-EnphaseSolar: Failed to retrieve solar data! error: " + error);
+                var returnObject = {};
+                returnObject[resultName] = {error: true};
+                resolve(returnObject);
             });
             dataReq.end();
         });
