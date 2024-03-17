@@ -36,7 +36,7 @@ Module.register("MMM-EnphaseSolar",{
             suffix: this.translate('SUFFIX_KILOWATT'),
             value: this.translate('LOADING')
         };
-        this.netOutput = {
+        this.gridUsage = {
             importingTitle: this.translate('IMPORTING') + ":",
             exportingTitle: this.translate('EXPORTING') + ":",
             suffix: this.translate('SUFFIX_KILOWATT'),
@@ -51,24 +51,19 @@ Module.register("MMM-EnphaseSolar",{
             title: this.translate('USED_TODAY') + ":",
             suffix: this.translate('SUFFIX_KILOWATTHOUR'),
             value: this.translate('LOADING')
-        }
-        this.currentBatteryState = {
-            title: this.translate('BATTERY_STATE') + ":",
-            suffix: '',
-            value: this.translate('LOADING')
-        }
+        };
         this.currentBatteryStatus = {
             title: this.translate('BATTERY_CHARGE'),
             suffix: this.translate('SUFFIX_PERCENT'),
             value: this.translate('LOADING')
-        }
+        };
         this.currentBatteryUsage = {
-            idleTitle: this.translate('BATTERY_USAGE_IDLE') + ":",
-            chargingTitle: this.translate('BATTERY_USAGE_CHARGING') + ":",
-            dischargingTitle: this.translate('BATTERY_USAGE_DISCHARGING') + ":",
+            idleTitle: this.translate('BATTERY_USAGE_IDLE') + ": ",
+            chargingTitle: this.translate('BATTERY_USAGE_CHARGING') + ": ",
+            dischargingTitle: this.translate('BATTERY_USAGE_DISCHARGING') + ": ",
             suffix: this.translate('SUFFIX_KILOWATT'),
             value: this.translate('LOADING')
-        }
+        };
         this.lastUpdated = Date.now() / 1000;
 
         this.loaded = false;
@@ -97,20 +92,22 @@ Module.register("MMM-EnphaseSolar",{
     },
 
     socketNotificationReceived: function(notification, payload) {
-        if (notification === "ENPHASE_SOLAR_DATA") {
+        if (notification === "ENPHASE_SOLAR_DATA" && payload.sessionId) {
             this.sessionId = payload.sessionId;
             this.currentProduction.value = payload.currentProduction;
             this.todaysProduction.value = payload.todaysProduction;
             this.lastUpdated = payload.lastUpdated;
             this.currentUsage.value = payload.currentUsage;
             this.todaysUsage.value = payload.todaysUsage;
-            this.netOutput.value = payload.netOutput;
-            this.currentBatteryState.value = payload.currentBatteryState;
+            this.gridUsage.value = payload.gridUsage;
             this.currentBatteryStatus.value = payload.currentBatteryStatus;
             this.currentBatteryUsage.value = payload.currentBatteryUsage;
 
             this.loaded = true;
             this.updateDom();
+        } else {
+            // if the payload came back with an empty session id then data retrieval failed, don't try and process it
+            this.sessionId = null;
         }
     },
 
@@ -139,16 +136,16 @@ Module.register("MMM-EnphaseSolar",{
         }
 
         if (this.config.displayNetOutput) {
-            var netOutputTitle;
-            var netOutputClass;
-            if (this.netOutput.value > 0) {
-                netOutputTitle = this.netOutput.importingTitle;
-                netOutputClass = 'net-output-importing';
+            var gridUsageTitle;
+            var gridUsageClass;
+            if (this.gridUsage.value > 0) {
+                gridUsageTitle = this.gridUsage.importingTitle;
+                gridUsageClass = 'net-output-importing';
             } else {
-                netOutputTitle = this.netOutput.exportingTitle;
-                netOutputClass = 'net-output-exporting';
+                gridUsageTitle = this.gridUsage.exportingTitle;
+                gridUsageClass = 'net-output-exporting';
             }
-            tableElement.appendChild(this.addRow(netOutputTitle, Math.abs(this.netOutput.value), this.netOutput.suffix, netOutputClass));
+            tableElement.appendChild(this.addRow(gridUsageTitle, Math.abs(this.gridUsage.value), this.gridUsage.suffix, gridUsageClass));
         }
 
         if (this.config.displayTodaysProduction) {
@@ -160,9 +157,6 @@ Module.register("MMM-EnphaseSolar",{
         }
 
         if (this.config.displayBatteries) {
-            var batteryStateClass = 'battery-state-' + this.currentBatteryState.value;
-            tableElement.appendChild(this.addRow(this.currentBatteryState.title, this.currentBatteryState.value, this.currentBatteryState.suffix, batteryStateClass));
-
             var batteryCount = 1;
             for (const battery of this.currentBatteryStatus.value) {
                 tableElement.appendChild(this.addRow(this.currentBatteryStatus.title + ' ' + batteryCount + ':', this.currentBatteryStatus.value[batteryCount-1].percentFull, this.currentBatteryStatus.suffix));
@@ -170,14 +164,18 @@ Module.register("MMM-EnphaseSolar",{
             }
 
             var usageTitle;
+            var batteryStateClass;
             if (this.currentBatteryUsage.value == 0) {
                 usageTitle = this.currentBatteryUsage.idleTitle;
-            } else if (this.currentBatteryUsage > 0) {
+                batteryStateClass = 'battery-state-idle';
+            } else if (this.currentBatteryUsage.value > 0) {
                 usageTitle = this.currentBatteryUsage.dischargingTitle;
-            } else if (this.currentBatteryUsage < 0) {
+                batteryStateClass = 'battery-state-discharging';
+            } else if (this.currentBatteryUsage.value < 0) {
                 usageTitle = this.currentBatteryUsage.chargingTitle;
+                batteryStateClass = 'battery-state-charging';
             }
-            tableElement.appendChild(this.addRow(usageTitle, this.currentBatteryUsage.value, this.currentBatteryUsage.suffix, batteryStateClass));
+            tableElement.appendChild(this.addRow(usageTitle, Math.abs(this.currentBatteryUsage.value), this.currentBatteryUsage.suffix, batteryStateClass));
         }
 
         wrapper.appendChild(tableElement);

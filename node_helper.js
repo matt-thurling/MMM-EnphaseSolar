@@ -62,10 +62,11 @@ module.exports = NodeHelper.create({
                 tokenReq.end();
             }).then(sessionId => {
 
-                const getProdData = self.getEnvoyPromise(payload.config.gatewayHost, '/production.json?details1', payload.sessionId, 'production');
+                const getProdData = self.getEnvoyPromise(payload.config.gatewayHost, '/production.json', payload.sessionId, 'production');
                 const getInvData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/ensemble/inventory', payload.sessionId, 'inventory');
+                const getLiveData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/livedata/status', payload.sessionId, 'live');
                 
-                Promise.all([getProdData, getInvData]).then(returnedData => {
+                Promise.all([getProdData, getInvData, getLiveData]).then(returnedData => {
                     var processedData = {};
                     for (const data of returnedData) {
                         if (data.production) {
@@ -75,27 +76,15 @@ module.exports = NodeHelper.create({
                             }
                             for (const productionData of data.production.production) {
                                 if (productionData.type === "eim") {
-                                    // current production can be slightly negative when nothing is being produced so zero it in that case
-                                    processedData.currentProduction = productionData.wNow < 0 ? 0 : (productionData.wNow / 1000).toFixed(2);
                                     processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
                                     processedData.lastUpdated = productionData.readingTime;
                                 }
                             }
                             for (const consumptionData of data.production.consumption) {
                                 if (consumptionData.measurementType === "total-consumption") {
-                                    processedData.currentUsage = (consumptionData.wNow / 1000).toFixed(2);
                                     processedData.todaysUsage = (consumptionData.whToday / 1000).toFixed(2);
-                                } else if (consumptionData.measurementType === "net-consumption") {
-                                    processedData.netOutput = (consumptionData.wNow / 1000).toFixed(2);
                                 }
                             }
-                            for (const storageData of data.production.storage) {
-                                if (storageData.type === "acb") {
-                                    processedData.currentBatteryState = storageData.state;
-                                    processedData.currentBatteryUsage = (storageData.wNow / 1000).toFixed(2);
-                                }
-                            }
-                            processedData.storage = data.production.storage;
                         }
                         else if (data.inventory) {
                             if (data.inventory.error) {
@@ -110,6 +99,18 @@ module.exports = NodeHelper.create({
                                     }
                                 }
                             }
+                        }
+                        else if (data.live) {
+                            if (data.live.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                sessionId = null;
+                            }
+                            // the live data api returns results in milliwatts, hence dividing by 1000000
+                            processedData.currentBatteryUsage = (data.live.meters.storage.agg_p_mw / 1000000).toFixed(2);
+                            // current production can be slightly negative when nothing is being produced so zero it in that case
+                            processedData.currentProduction = data.live.meters.pv.agg_p_mw < 0 ? 0 : (data.live.meters.pv.agg_p_mw / 1000000).toFixed(2);
+                            processedData.currentUsage = (data.live.meters.load.agg_p_mw / 1000000).toFixed(2);
+                            processedData.gridUsage = (data.live.meters.grid.agg_p_mw / 1000000).toFixed(2);
                         }
                     }
                     processedData.sessionId = sessionId;
