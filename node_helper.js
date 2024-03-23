@@ -105,6 +105,11 @@ module.exports = NodeHelper.create({
                                 // clear the session id as it's expiry is likely the cause of the error
                                 sessionId = null;
                             }
+                            // check if the live data stream is enabled, and enable it if not
+                            // note that the live data will be out of date this tick
+                            if (data.live.connection.sc_stream !== "enabled") {
+                                self.enableLiveDataStream(payload.config.gatewayHost, payload.sessionId);
+                            }
                             // the live data api returns results in milliwatts, hence dividing by 1000000
                             processedData.currentBatteryUsage = (data.live.meters.storage.agg_p_mw / 1000000).toFixed(2);
                             // current production can be slightly negative when nothing is being produced so zero it in that case
@@ -161,4 +166,45 @@ module.exports = NodeHelper.create({
             dataReq.end();
         });
     },
+
+    enableLiveDataStream: function(gatewayHost, sessionId) {
+        const postData = JSON.stringify({ "enable": 1 });
+        const options = {
+            host: gatewayHost,
+            method: 'POST',
+            path: '/ivp/livedata/stream',
+            rejectUnauthorized: false,
+            headers: {
+                'Accept': 'application/json',
+                'Cookie': 'sessionId=' + sessionId,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+        const dataReq = https.request(options, (response) => {
+            var returnObject = {};
+            if (response.statusCode != 200) {
+                console.error("MMM-EnphaseSolar: data request error when enabling live data stream: " + response.statusCode);
+                return false;
+            }
+            response.on('data', (data) => {
+                try {
+                    const result = JSON.parse(data);
+                    return result.sc_stream === "enabled";
+                } catch(e) {
+                    console.error("MMM-EnphaseSolar: Unable to parse JSON when enabling live data stream, data in response was: " + data);
+                    return false;
+                }
+            });
+        });
+        dataReq.on('error', (error) => {
+            console.error("MMM-EnphaseSolar: Failed to enable live data stream! error: " + error);
+            if (error.name === "AggregateError") {
+                console.error("MMM-EnphaseSolar: " + error.errors);
+            }
+            return false;
+        });
+        dataReq.write(postData);
+        dataReq.end();
+    }
 });

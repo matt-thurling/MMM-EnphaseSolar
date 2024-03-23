@@ -108,6 +108,7 @@ Module.register("MMM-EnphaseSolar",{
         } else {
             // if the payload came back with an empty session id then data retrieval failed, don't try and process it
             this.sessionId = null;
+            this.loaded = false;
         }
     },
 
@@ -148,21 +149,7 @@ Module.register("MMM-EnphaseSolar",{
             tableElement.appendChild(this.addRow(gridUsageTitle, Math.abs(this.gridUsage.value), this.gridUsage.suffix, gridUsageClass));
         }
 
-        if (this.config.displayTodaysProduction) {
-            tableElement.appendChild(this.addRow(this.todaysProduction.title, this.todaysProduction.value, this.todaysProduction.suffix, 'todays-production'));
-        }
-
-        if (this.config.displayTodaysUsage) {
-            tableElement.appendChild(this.addRow(this.todaysUsage.title, this.todaysUsage.value, this.todaysUsage.suffix, 'todays-usage'));
-        }
-
         if (this.config.displayBatteries) {
-            var batteryCount = 1;
-            for (const battery of this.currentBatteryStatus.value) {
-                tableElement.appendChild(this.addRow(this.currentBatteryStatus.title + ' ' + batteryCount + ':', this.currentBatteryStatus.value[batteryCount-1].percentFull, this.currentBatteryStatus.suffix));
-                batteryCount++;
-            }
-
             var usageTitle;
             var batteryStateClass;
             if (this.currentBatteryUsage.value == 0) {
@@ -176,6 +163,20 @@ Module.register("MMM-EnphaseSolar",{
                 batteryStateClass = 'battery-state-charging';
             }
             tableElement.appendChild(this.addRow(usageTitle, Math.abs(this.currentBatteryUsage.value), this.currentBatteryUsage.suffix, batteryStateClass));
+
+            var batteryCount = 1;
+            for (const battery of this.currentBatteryStatus.value) {
+                tableElement.appendChild(this.addRow(this.currentBatteryStatus.title + ' ' + batteryCount + ':', this.currentBatteryStatus.value[batteryCount-1].percentFull, this.currentBatteryStatus.suffix));
+                batteryCount++;
+            }
+        }
+
+        if (this.config.displayTodaysProduction) {
+            tableElement.appendChild(this.addRow(this.todaysProduction.title, this.todaysProduction.value, this.todaysProduction.suffix, 'todays-production'));
+        }
+
+        if (this.config.displayTodaysUsage) {
+            tableElement.appendChild(this.addRow(this.todaysUsage.title, this.todaysUsage.value, this.todaysUsage.suffix, 'todays-usage'));
         }
 
         wrapper.appendChild(tableElement);
