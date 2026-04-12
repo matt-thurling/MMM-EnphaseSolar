@@ -72,30 +72,34 @@ module.exports = NodeHelper.create({
                         if (data.production) {
                             if (data.production.error) {
                                 // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in production data, clearing sessionId.");
                                 sessionId = null;
-                            }
-                            for (const productionData of data.production.production) {
-                                if (productionData.type === "eim") {
-                                    processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
-                                    processedData.lastUpdated = productionData.readingTime;
+                            } else {
+                                for (const productionData of data.production.production) {
+                                    if (productionData.type === "eim") {
+                                        processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
+                                        processedData.lastUpdated = productionData.readingTime;
+                                    }
                                 }
-                            }
-                            for (const consumptionData of data.production.consumption) {
-                                if (consumptionData.measurementType === "total-consumption") {
-                                    processedData.todaysUsage = (consumptionData.whToday / 1000).toFixed(2);
+                                for (const consumptionData of data.production.consumption) {
+                                    if (consumptionData.measurementType === "total-consumption") {
+                                        processedData.todaysUsage = (consumptionData.whToday / 1000).toFixed(2);
+                                    }
                                 }
                             }
                         }
                         else if (data.inventory) {
                             if (data.inventory.error) {
                                 // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in inventory data, clearing sessionId.");
                                 sessionId = null;
-                            }
-                            for (const inventoryData of data.inventory) {
-                                if (inventoryData.type === "ENCHARGE") {
-                                    processedData.currentBatteryStatus = [];
-                                    for (const device of inventoryData.devices) {
-                                        processedData.currentBatteryStatus.push(device);
+                            } else {
+                                for (const inventoryData of data.inventory) {
+                                    if (inventoryData.type === "ENCHARGE") {
+                                        processedData.currentBatteryStatus = [];
+                                        for (const device of inventoryData.devices) {
+                                            processedData.currentBatteryStatus.push(device);
+                                        }
                                     }
                                 }
                             }
@@ -103,19 +107,21 @@ module.exports = NodeHelper.create({
                         else if (data.live) {
                             if (data.live.error) {
                                 // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in live data, clearing sessionId.");
                                 sessionId = null;
+                            } else {
+                                // check if the live data stream is enabled, and enable it if not
+                                // note that the live data will be out of date this tick
+                                if (data.live.connection.sc_stream !== "enabled") {
+                                    self.enableLiveDataStream(payload.config.gatewayHost, payload.sessionId);
+                                }
+                                // the live data api returns results in milliwatts, hence dividing by 1000000
+                                processedData.currentBatteryUsage = (data.live.meters.storage.agg_p_mw / 1000000).toFixed(2);
+                                // current production can be slightly negative when nothing is being produced so zero it in that case
+                                processedData.currentProduction = data.live.meters.pv.agg_p_mw < 0 ? 0 : (data.live.meters.pv.agg_p_mw / 1000000).toFixed(2);
+                                processedData.currentUsage = (data.live.meters.load.agg_p_mw / 1000000).toFixed(2);
+                                processedData.gridUsage = (data.live.meters.grid.agg_p_mw / 1000000).toFixed(2);
                             }
-                            // check if the live data stream is enabled, and enable it if not
-                            // note that the live data will be out of date this tick
-                            if (data.live.connection.sc_stream !== "enabled") {
-                                self.enableLiveDataStream(payload.config.gatewayHost, payload.sessionId);
-                            }
-                            // the live data api returns results in milliwatts, hence dividing by 1000000
-                            processedData.currentBatteryUsage = (data.live.meters.storage.agg_p_mw / 1000000).toFixed(2);
-                            // current production can be slightly negative when nothing is being produced so zero it in that case
-                            processedData.currentProduction = data.live.meters.pv.agg_p_mw < 0 ? 0 : (data.live.meters.pv.agg_p_mw / 1000000).toFixed(2);
-                            processedData.currentUsage = (data.live.meters.load.agg_p_mw / 1000000).toFixed(2);
-                            processedData.gridUsage = (data.live.meters.grid.agg_p_mw / 1000000).toFixed(2);
                         }
                     }
                     processedData.sessionId = sessionId;
@@ -140,20 +146,22 @@ module.exports = NodeHelper.create({
             };
             const dataReq = https.request(options, (response) => {
                 var returnObject = {};
-                if (response.statusCode != 200) {
-                    console.error("MMM-EnphaseSolar: data request error: " + response.statusCode);
-                    // clear session id since its expiry may have been the cause of the failure, will retrieve a new one on next refresh
-                    returnObject[resultName] = {error: true};
-                    resolve(returnObject);
-                }
+                
                 response.on('data', (data) => {
-                    try {
-                        returnObject[resultName] = JSON.parse(data);
-                        resolve(returnObject);
-                    } catch(e) {
-                        console.error("MMM-EnphaseSolar: Unable to parse JSON, data in response was: " + data);
+                    if (response.statusCode != 200) {
+                        console.error("MMM-EnphaseSolar: data request error: " + response.statusCode);
+                        // clear session id since its expiry may have been the cause of the failure, will retrieve a new one on next refresh
                         returnObject[resultName] = {error: true};
                         resolve(returnObject);
+                    } else {
+                        try {
+                            returnObject[resultName] = JSON.parse(data);
+                            resolve(returnObject);
+                        } catch(e) {
+                            console.error("MMM-EnphaseSolar: Unable to parse JSON, data in response was: " + data);
+                            returnObject[resultName] = {error: true};
+                            resolve(returnObject);
+                        }
                     }
                 });
             });
