@@ -75,6 +75,8 @@ Use of this module requires a login token. Apparently these tokens will expire a
 ## Known Issues
 The values given by the API appear to be dependant on your system's configuration and installation setup. One user has reported that it seems their system does not have consumption monitoring because their current usage always equals their current production so netoutput is always zero. This has lead to their "Used Today" field always showing 0. My only recommendation would be to disable the display of this field if you've got a similar setup since it will just be taking up screen real estate in a useless manner.
 
+Enphase broke the local APIs, somewhere around version 8.3 of the gateway firmware, so it may not be possible to retrieve a value for "Used Today" (see the IMPORTANT NOTE at the top of the Readme).
+
 Please feel free to raise any other issues you might find.
 
 ## Attribution
