@@ -16,5 +16,6 @@
   "SUFFIX_KILOWATT": "kW",
   "SUFFIX_KILOWATTHOUR": "kWh",
   "SUFFIX_PERCENT": "%",
-  "ERROR_MISSING_CONFIG": "Missing configuration"
+  "ERROR_MISSING_CONFIG": "Missing configuration",
+  "UNAVAILABLE": "(unavailable)"
 }

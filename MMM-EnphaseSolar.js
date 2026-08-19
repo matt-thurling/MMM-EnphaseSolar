@@ -19,7 +19,7 @@ Module.register("MMM-EnphaseSolar",{
         displayTodaysUsage: true,
         displayLastUpdate: true,
         displayLastUpdateFormat: "ddd HH:mm:ss",
-        displayBatteries: true,
+        displayBatteries: false,
         debug: false,
     },
 
@@ -95,10 +95,10 @@ Module.register("MMM-EnphaseSolar",{
         if (notification === "ENPHASE_SOLAR_DATA" && payload.sessionId) {
             this.sessionId = payload.sessionId;
             this.currentProduction.value = payload.currentProduction;
-            this.todaysProduction.value = payload.todaysProduction;
+            this.todaysProduction.value = payload.todaysProduction ? payload.todaysProduction : this.translate('UNAVAILABLE');
             this.lastUpdated = payload.lastUpdated;
             this.currentUsage.value = payload.currentUsage;
-            this.todaysUsage.value = payload.todaysUsage;
+            this.todaysUsage.value = payload.todaysUsage ? payload.todaysUsage : this.translate('UNAVAILABLE');
             this.gridUsage.value = payload.gridUsage;
             this.currentBatteryStatus.value = payload.currentBatteryStatus;
             this.currentBatteryUsage.value = payload.currentBatteryUsage;

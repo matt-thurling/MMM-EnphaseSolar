@@ -63,10 +63,15 @@ module.exports = NodeHelper.create({
             }).then(sessionId => {
 
                 const getProdData = self.getEnvoyPromise(payload.config.gatewayHost, '/production.json', payload.sessionId, 'production');
-                const getInvData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/ensemble/inventory', payload.sessionId, 'inventory');
                 const getLiveData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/livedata/status', payload.sessionId, 'live');
-                
-                Promise.all([getProdData, getInvData, getLiveData]).then(returnedData => {
+                const getPdmData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/pdm/energy', payload.sessionId, 'pdm');
+                const promises = [getProdData, getLiveData, getPdmData];
+                if (payload.config.displayBatteries) {
+                    const getInvData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/ensemble/inventory', payload.sessionId, 'inventory');
+                    promises.push(getInvData);
+                }
+
+                Promise.all(promises).then(returnedData => {
                     var processedData = {};
                     for (const data of returnedData) {
                         if (data.production) {
@@ -77,12 +82,14 @@ module.exports = NodeHelper.create({
                             } else {
                                 for (const productionData of data.production.production) {
                                     if (productionData.type === "eim") {
-                                        processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
+                                    // sadly enphase have broken this api in later firmwares and the today values get set to the lifetime values
+                                        if (productionData.whToday !== productionData.whLifetime)
+                                            processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
                                         processedData.lastUpdated = productionData.readingTime;
                                     }
                                 }
                                 for (const consumptionData of data.production.consumption) {
-                                    if (consumptionData.measurementType === "total-consumption") {
+                                    if (consumptionData.measurementType === "total-consumption" && consumptionData.whToday !== consumptionData.whLifetime) {
                                         processedData.todaysUsage = (consumptionData.whToday / 1000).toFixed(2);
                                     }
                                 }
@@ -93,7 +100,7 @@ module.exports = NodeHelper.create({
                                 // clear the session id as it's expiry is likely the cause of the error
                                 console.debug("MMM-EnphaseSolar: error in inventory data, clearing sessionId.");
                                 sessionId = null;
-                            } else {
+                            } else if (Array.isArray(data.inventory)){
                                 for (const inventoryData of data.inventory) {
                                     if (inventoryData.type === "ENCHARGE") {
                                         processedData.currentBatteryStatus = [];
@@ -121,6 +128,18 @@ module.exports = NodeHelper.create({
                                 processedData.currentProduction = data.live.meters.pv.agg_p_mw < 0 ? 0 : (data.live.meters.pv.agg_p_mw / 1000000).toFixed(2);
                                 processedData.currentUsage = (data.live.meters.load.agg_p_mw / 1000000).toFixed(2);
                                 processedData.gridUsage = (data.live.meters.grid.agg_p_mw / 1000000).toFixed(2);
+                            }
+                        }
+                        else if (data.pdm) {
+                            if (data.pdm.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in pdm data, clearing sessionId.");
+                                sessionId = null;
+                            } else {
+                                // workaround if the production data is not returning actual daily production values
+                                if (!processedData.todaysProduction && data.pdm.production?.pcu?.wattHoursToday) {
+                                    processedData.todaysProduction = (data.pdm.production.pcu.wattHoursToday / 1000).toFixed(2);
+                                }
                             }
                         }
                     }
@@ -156,9 +175,10 @@ module.exports = NodeHelper.create({
                     } else {
                         try {
                             returnObject[resultName] = JSON.parse(data);
+                            console.debug("MMM-EnphaseSolar: data in response was: " + data);
                             resolve(returnObject);
                         } catch(e) {
-                            console.error("MMM-EnphaseSolar: Unable to parse JSON, data in response was: " + data);
+                            console.error("MMM-EnphaseSolar: Unable to parse JSON for '" + resultName + "', data in response was: " + data);
                             returnObject[resultName] = {error: true};
                             resolve(returnObject);
                         }
@@ -198,6 +218,7 @@ module.exports = NodeHelper.create({
             response.on('data', (data) => {
                 try {
                     const result = JSON.parse(data);
+                    console.debug("MMM-EnphaseSolar: data in response was: " + data);
                     return result.sc_stream === "enabled";
                 } catch(e) {
                     console.error("MMM-EnphaseSolar: Unable to parse JSON when enabling live data stream, data in response was: " + data);
