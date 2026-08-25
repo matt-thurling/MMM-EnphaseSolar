@@ -1,6 +1,12 @@
 # MMM-EnphaseSolar
 A Module for [MagicMirror](https://github.com/MichMich/MagicMirror) designed to retrieve data from an Enphase-S gateway (firmware 7+) - it may work with other Enphase gateways but this is all I have to test with. This module is reading data locally from your gateway (i.e. not via the enlighten cloud API) but you'll still need to get a login token for it from Enphase (see instructions below).
 
+## IMPORTANT NOTE
+Recent firmware versions (somewhere around ~8.3) have significantly broken the local APIs which this module uses. 
+Enphase have made it pretty clear they won't be supporting the local API going forward so they have no intention of fixing it either. Since Enphase push the firmware automatically and we have no way of keeping our systems at a specific version (i.e. an old one with working local APIs), then this means this module is likely to become less and less useful in the future.
+The most notable breakage as of writing that affects this module is that the production API is giving the "lifetime" values in the "today" values. Luckily it appears that the "Produced today" value can still be retrieved via the pdm API, however there's no alternative API for getting the "Used today". If you're receiving an "unavailable" message in the used today... then unfortunately the only advice I can give is to disable showing this field in the config (see below), and maybe add your voice to the numerous others on the Enphase forums complaining about them abandoning the local APIs. There is an API support email address for Enphase (api@enphaseenergy.com) that you could also try emailing and to let them know you want the local APIs to be supported, but you're likely to get a standard "We will only be supporting the cloud APIs moving forward" response.
+Given that this lack of local API support has affected the HomeAssistant community too (of whom there are significantly more users than of this module) and Enphase still couldn't care less then I hold little hope of this changing any time soon.
+
 ## Installation
   1. Clone this repo into your MagicMirror/modules directory
   2. Get a login token (see instructions below)
@@ -31,7 +37,7 @@ modules: [
 ````
 
 ## Login Token
-Use of this module requires a login token. Apparently these tokens will expire after 12 months (though some have reported much less) so the following will need to be repeated when that happens. There are two ways I know of to get the required token detailed below.
+Use of this module requires a login token. Apparently these tokens will expire after 12 months (though some have reported much less) so the following will need to be repeated when that happens. There are two ways I know of to get the required token detailed below. It's been noted that for some users Method 1 will give them a token that expires after 12 hours, while method 2 gave them one that lasted much longer. If you find the token you get from one method is expiring very quickly then try getting a token via the other method.
 
 *Note: some other modules (e.g. https://github.com/tkrywit/MMM-Solar/) and software that interact with Enphase will suggest logging into the developer portal to obtain an API key - however these keys are intended to be used with their cloud services, and so there’s pricing attached. At some point in the past using this API was free which is why others may suggest it, but this is no longer the case. Since this module is only reading from the local system’s APIs then you don’t need a cloud services API key.*
 
@@ -56,9 +62,10 @@ Use of this module requires a login token. Apparently these tokens will expire a
 | `displayCurrentUsage` | Whether to display the current energy usage, displayed in kW. | `true` |
 | `displayNetOutput` | Whether to display the current net energy output, displayed in kW as importing (using more than producing) or exporting (producing more than being used). | `true` |
 | `displayTodaysProduction` | Whether to display the total energy produced today, displayed in kWh. | `true` |
-| `displayTodaysUsage` | Whether to display the total energy used today (does not differentiate between energy imported or from the grid), displayed in kWh. | `true` |
+| `displayTodaysUsage` | Whether to display the total energy used today (does not differentiate between energy imported or from the grid), displayed in kWh. *See IMPORTANT NOTE above regarding this value.* | `true` |
 | `displayLastUpdate` | Whether to display the last updated timestamp, formatted as per `displayLastUpdateFormat` (see below). This value is the date/time the meter was read as reported from the local gateway, not the last time the module attempted to retrieve the data. | `true` |
 | `displayLastUpdateFormat` | Format to display the last update value. See [Moment.js](https://momentjs.com/docs/#/displaying/) documentation for all display possibilities. | `ddd HH:mm:ss` |
+| `displayBatteries` | If your system has enphase batteries, then display their current charge. This functionality may cause problems so enable it at your own risk | `false` |
 
 
 ## Screenshot
@@ -67,6 +74,8 @@ Use of this module requires a login token. Apparently these tokens will expire a
 
 ## Known Issues
 The values given by the API appear to be dependant on your system's configuration and installation setup. One user has reported that it seems their system does not have consumption monitoring because their current usage always equals their current production so netoutput is always zero. This has lead to their "Used Today" field always showing 0. My only recommendation would be to disable the display of this field if you've got a similar setup since it will just be taking up screen real estate in a useless manner.
+
+Enphase broke the local APIs, somewhere around version 8.3 of the gateway firmware, so it may not be possible to retrieve a value for "Used Today" (see the IMPORTANT NOTE at the top of the Readme).
 
 Please feel free to raise any other issues you might find.
 

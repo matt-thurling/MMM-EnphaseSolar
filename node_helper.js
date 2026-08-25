@@ -61,38 +61,179 @@ module.exports = NodeHelper.create({
                 });
                 tokenReq.end();
             }).then(sessionId => {
-                const options = {
-                    host: payload.config.gatewayHost,
-                    method: 'GET',
-                    path: '/production.json?details1',
-                    rejectUnauthorized: false,
-                    headers: {
-                        'Accept': 'application/json',
-                        'Cookie': 'sessionId=' + payload.sessionId,
-                    }
-                };
-                const dataReq = https.request(options, (response) => {
-                    if (response.statusCode != 200) {
-                        console.error("MMM-EnphaseSolar: data request error: " + response.statusCode);
-                        // clear session id since its expiry may have been the cause of the failure, will retrieve a new one on next refresh
-                        self.sendSocketNotification("ENPHASE_SOLAR_DATA", {sessionId: "", production: [], consumption: []});
-                    }
-                    response.on('data', (data) => {
-                        let jsonData;
-                        try {
-                            jsonData = JSON.parse(data);
-                            jsonData.sessionId = sessionId;
-                            self.sendSocketNotification("ENPHASE_SOLAR_DATA", jsonData);
-                        } catch(e) {
-                            console.error("MMM-EnphaseSolar: Unable to parse JSON, data in response was: " + data);
+
+                const getProdData = self.getEnvoyPromise(payload.config.gatewayHost, '/production.json', payload.sessionId, 'production');
+                const getLiveData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/livedata/status', payload.sessionId, 'live');
+                const getPdmData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/pdm/energy', payload.sessionId, 'pdm');
+                const promises = [getProdData, getLiveData, getPdmData];
+                if (payload.config.displayBatteries) {
+                    const getInvData = self.getEnvoyPromise(payload.config.gatewayHost, '/ivp/ensemble/inventory', payload.sessionId, 'inventory');
+                    promises.push(getInvData);
+                }
+
+                Promise.all(promises).then(returnedData => {
+                    var processedData = {};
+                    for (const data of returnedData) {
+                        if (data.production) {
+                            if (data.production.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in production data, clearing sessionId.");
+                                sessionId = null;
+                            } else {
+                                for (const productionData of data.production.production) {
+                                    if (productionData.type === "eim") {
+                                    // sadly enphase have broken this api in later firmwares and the today values get set to the lifetime values
+                                        if (productionData.whToday !== productionData.whLifetime)
+                                            processedData.todaysProduction = (productionData.whToday / 1000).toFixed(2);
+                                        processedData.lastUpdated = productionData.readingTime;
+                                    }
+                                }
+                                for (const consumptionData of data.production.consumption) {
+                                    if (consumptionData.measurementType === "total-consumption" && consumptionData.whToday !== consumptionData.whLifetime) {
+                                        processedData.todaysUsage = (consumptionData.whToday / 1000).toFixed(2);
+                                    }
+                                }
+                            }
                         }
-                    });
-                });
-                dataReq.on('error', (error) => {
-                    console.error("MMM-EnphaseSolar: Failed to retrieve solar data! error: " + error);
-                });
-                dataReq.end();
+                        else if (data.inventory) {
+                            if (data.inventory.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in inventory data, clearing sessionId.");
+                                sessionId = null;
+                            } else if (Array.isArray(data.inventory)){
+                                for (const inventoryData of data.inventory) {
+                                    if (inventoryData.type === "ENCHARGE") {
+                                        processedData.currentBatteryStatus = [];
+                                        for (const device of inventoryData.devices) {
+                                            processedData.currentBatteryStatus.push(device);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if (data.live) {
+                            if (data.live.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in live data, clearing sessionId.");
+                                sessionId = null;
+                            } else {
+                                // check if the live data stream is enabled, and enable it if not
+                                // note that the live data will be out of date this tick
+                                if (data.live.connection.sc_stream !== "enabled") {
+                                    self.enableLiveDataStream(payload.config.gatewayHost, payload.sessionId);
+                                }
+                                // the live data api returns results in milliwatts, hence dividing by 1000000
+                                processedData.currentBatteryUsage = (data.live.meters.storage.agg_p_mw / 1000000).toFixed(2);
+                                // current production can be slightly negative when nothing is being produced so zero it in that case
+                                processedData.currentProduction = data.live.meters.pv.agg_p_mw < 0 ? 0 : (data.live.meters.pv.agg_p_mw / 1000000).toFixed(2);
+                                processedData.currentUsage = (data.live.meters.load.agg_p_mw / 1000000).toFixed(2);
+                                processedData.gridUsage = (data.live.meters.grid.agg_p_mw / 1000000).toFixed(2);
+                            }
+                        }
+                        else if (data.pdm) {
+                            if (data.pdm.error) {
+                                // clear the session id as it's expiry is likely the cause of the error
+                                console.debug("MMM-EnphaseSolar: error in pdm data, clearing sessionId.");
+                                sessionId = null;
+                            } else {
+                                // workaround if the production data is not returning actual daily production values
+                                if (!processedData.todaysProduction && data.pdm.production?.pcu?.wattHoursToday) {
+                                    processedData.todaysProduction = (data.pdm.production.pcu.wattHoursToday / 1000).toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                    processedData.sessionId = sessionId;
+                    //console.log(processedData);
+                    self.sendSocketNotification("ENPHASE_SOLAR_DATA", processedData);
+                })
             });
         }
     },
+
+    getEnvoyPromise: function(gatewayHost, apiPath, sessionId, resultName) {
+        return new Promise(resolve => {
+            const options = {
+                host: gatewayHost,
+                method: 'GET',
+                path: apiPath,
+                rejectUnauthorized: false,
+                headers: {
+                    'Accept': 'application/json',
+                    'Cookie': 'sessionId=' + sessionId,
+                }
+            };
+            const dataReq = https.request(options, (response) => {
+                var returnObject = {};
+                
+                response.on('data', (data) => {
+                    if (response.statusCode != 200) {
+                        console.error("MMM-EnphaseSolar: data request error: " + response.statusCode);
+                        // clear session id since its expiry may have been the cause of the failure, will retrieve a new one on next refresh
+                        returnObject[resultName] = {error: true};
+                        resolve(returnObject);
+                    } else {
+                        try {
+                            returnObject[resultName] = JSON.parse(data);
+                            console.debug("MMM-EnphaseSolar: data in response was: " + data);
+                            resolve(returnObject);
+                        } catch(e) {
+                            console.error("MMM-EnphaseSolar: Unable to parse JSON for '" + resultName + "', data in response was: " + data);
+                            returnObject[resultName] = {error: true};
+                            resolve(returnObject);
+                        }
+                    }
+                });
+            });
+            dataReq.on('error', (error) => {
+                console.error("MMM-EnphaseSolar: Failed to retrieve solar data! error: " + error);
+                var returnObject = {};
+                returnObject[resultName] = {error: true};
+                resolve(returnObject);
+            });
+            dataReq.end();
+        });
+    },
+
+    enableLiveDataStream: function(gatewayHost, sessionId) {
+        const postData = JSON.stringify({ "enable": 1 });
+        const options = {
+            host: gatewayHost,
+            method: 'POST',
+            path: '/ivp/livedata/stream',
+            rejectUnauthorized: false,
+            headers: {
+                'Accept': 'application/json',
+                'Cookie': 'sessionId=' + sessionId,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+        const dataReq = https.request(options, (response) => {
+            var returnObject = {};
+            if (response.statusCode != 200) {
+                console.error("MMM-EnphaseSolar: data request error when enabling live data stream: " + response.statusCode);
+                return false;
+            }
+            response.on('data', (data) => {
+                try {
+                    const result = JSON.parse(data);
+                    console.debug("MMM-EnphaseSolar: data in response was: " + data);
+                    return result.sc_stream === "enabled";
+                } catch(e) {
+                    console.error("MMM-EnphaseSolar: Unable to parse JSON when enabling live data stream, data in response was: " + data);
+                    return false;
+                }
+            });
+        });
+        dataReq.on('error', (error) => {
+            console.error("MMM-EnphaseSolar: Failed to enable live data stream! error: " + error);
+            if (error.name === "AggregateError") {
+                console.error("MMM-EnphaseSolar: " + error.errors);
+            }
+            return false;
+        });
+        dataReq.write(postData);
+        dataReq.end();
+    }
 });

@@ -5,3 +5,11 @@
 .MMM-EnphaseSolar .data-net-output-exporting {
 	color: lightgreen;
 }
+
+.MMM-EnphaseSolar .data-battery-state-charging {
+	color: lightgreen;
+}
+
+.MMM-EnphaseSolar .data-battery-state-discharging {
+	color: orange;
+}
